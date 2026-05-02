@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { ENDPOINTS, GROUPS } from './endpoints'
 import type { EndpointDef, KV, HttpMethod } from './types'
 import './App.css'
@@ -343,6 +344,7 @@ export default function App() {
           <span className="hdr-ver">3.3.0</span>
         </div>
         <div className="hdr-right">
+          <Link to="/app" style={{ fontSize:'12px', padding:'4px 12px', background:'#6366f115', border:'1px solid #6366f140', borderRadius:'16px', color:'#a5b4fc', textDecoration:'none', whiteSpace:'nowrap' }}>🏠 Web App</Link>
           <TokenBadge
             label="MedEx"
             token={medexToken}
