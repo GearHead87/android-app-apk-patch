@@ -1,0 +1,1644 @@
+{
+  "info": {
+    "_postman_id": "d4f7a2b1-3c89-4e56-a012-8f6b9d3e7c45",
+    "name": "MedEx 3.3.0 — Full API Collection",
+    "description": "# MedEx 3.3.0 — Complete API Collection\n\n**Package:** `com.medex.bd.medex`  \n**Version:** 3.3.0 (versionCode 13)  \n**Extracted from:** `lib/arm64-v8a/libapp.so` (Flutter AOT), `MainActivity.java`, `res/values/strings.xml`, `AndroidManifest.xml`\n\n---\n\n## Hosts covered\n| Host | Purpose |\n|------|---------|\n| `https://medex.com.bd/api/beta/` | Primary MedEx REST API |\n| `http://apps.acibd.com/apps/myaci/` | ACIBD order backend (cleartext HTTP) |\n| `https://script.google.com/macros/s/…/exec` | Google Apps Script analytics webhook |\n\n---\n\n## Auth flow (call order matters)\n1. **POST `/login`** → captures `data.authToken` + `data.userId` into collection variables `auth_token` & `user_id` (via test script).\n2. **POST `/verify-otp`** — only required when `data.otpRequired = true` in the login response.\n3. **GET `/resend-otp?user_id={{user_id}}`** — resend if OTP expired.\n4. All subsequent protected endpoints use `Authorization: Bearer {{auth_token}}` (set at collection level).\n\n---\n\n## Collection Variables\n| Variable | Default | Description |\n|----------|---------|-------------|\n| `base_url` | `https://medex.com.bd/api/beta` | MedEx API base (no trailing slash) |\n| `auth_token` | _(empty)_ | Bearer token — auto-set by Login test script |\n| `user_id` | _(empty)_ | Numeric user ID — auto-set by Login test script |\n| `acibd_base_url` | `http://apps.acibd.com/apps/myaci` | ACIBD base URL |\n| `acibd_order_token` | _(empty)_ | ACIBD session token — auto-set by ACIBD Login test script |\n| `brand_id` | `1` | Example brand/drug ID for detail requests |\n| `generic_id` | `1` | Example generic ID |\n| `company_id` | `1` | Example company ID |\n| `drug_class_id` | `1` | Example drug-class ID |\n| `dosage_form_id` | `1` | Example dosage-form ID |\n| `job_id` | `1` | Example job ID |\n| `history_id` | `1` | Example history entry ID |\n\n---\n\n## Response envelope (MedEx)\n```json\n{ \"success\": true, \"message\": \"...\", \"data\": {} }\n```\n`data` is an object or array depending on the route.  \nUnauthenticated calls to protected routes return `{\"success\":false,\"message\":\"Authentication token missing\",\"data\":[]}`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "medex_3_3_0"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://medex.com.bd/api/beta",
+      "type": "string",
+      "description": "MedEx primary REST API base URL (no trailing slash)"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string",
+      "description": "Bearer token from POST /login → data.authToken. Auto-populated by the Login request test script."
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string",
+      "description": "Numeric user ID from POST /login → data.userId. Auto-populated by the Login request test script."
+    },
+    {
+      "key": "acibd_base_url",
+      "value": "http://apps.acibd.com/apps/myaci",
+      "type": "string",
+      "description": "ACIBD order backend base URL (plain HTTP — cleartext)"
+    },
+    {
+      "key": "acibd_order_token",
+      "value": "",
+      "type": "string",
+      "description": "ACIBD session/order token returned after ACIBD login. Auto-populated by ACIBD Login test script."
+    },
+    {
+      "key": "brand_id",
+      "value": "1",
+      "type": "string",
+      "description": "Example brand (drug) ID for detail/favorite/history requests"
+    },
+    {
+      "key": "generic_id",
+      "value": "1",
+      "type": "string",
+      "description": "Example generic ID for detail requests"
+    },
+    {
+      "key": "company_id",
+      "value": "1",
+      "type": "string",
+      "description": "Example company ID"
+    },
+    {
+      "key": "drug_class_id",
+      "value": "1",
+      "type": "string",
+      "description": "Example drug-class ID"
+    },
+    {
+      "key": "dosage_form_id",
+      "value": "1",
+      "type": "string",
+      "description": "Example dosage-form ID"
+    },
+    {
+      "key": "job_id",
+      "value": "1",
+      "type": "string",
+      "description": "Example job listing ID"
+    },
+    {
+      "key": "history_id",
+      "value": "1",
+      "type": "string",
+      "description": "Example history entry ID"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "🔐 Auth",
+      "description": "Authentication flow: Login → (Verify OTP if required) → all subsequent calls use the captured Bearer token.\n\n**Call order:**\n1. Login — captures `auth_token` + `user_id`\n2. Verify OTP — only if `otpRequired = true` in login response\n3. Resend OTP — if OTP expired\n4. Logout — optional server-side session invalidation",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Auto-capture auth token and user ID into collection variables",
+                  "if (pm.response.code === 200) {",
+                  "    try {",
+                  "        const res = pm.response.json();",
+                  "        if (res.success && res.data) {",
+                  "            if (res.data.authToken) {",
+                  "                pm.collectionVariables.set('auth_token', res.data.authToken);",
+                  "                console.log('✅ auth_token captured:', res.data.authToken.substring(0, 10) + '...');",
+                  "            }",
+                  "            if (res.data.userId) {",
+                  "                pm.collectionVariables.set('user_id', String(res.data.userId));",
+                  "                console.log('✅ user_id captured:', res.data.userId);",
+                  "            }",
+                  "            if (res.data.otpRequired) {",
+                  "                console.log('⚠️  OTP required — call \"Verify OTP\" next with user_id:', res.data.userId);",
+                  "            }",
+                  "        }",
+                  "    } catch (e) {",
+                  "        console.error('Failed to parse login response:', e);",
+                  "    }",
+                  "}",
+                  "",
+                  "pm.test('Login successful', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const res = pm.response.json();",
+                  "    pm.expect(res.success).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"mobile_number\": \"01711943040\",\n  \"profession\": \"1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/login",
+              "host": ["{{base_url}}"],
+              "path": ["login"]
+            },
+            "description": "**Register or log in** to MedEx.\n\nThe server validates all fields server-side; error messages reference field names directly.\n\n### Request body fields\n| Field | Type | Constraint | Description |\n|-------|------|-----------|-------------|\n| `name` | string | min 3 chars | User display name |\n| `mobile_number` | string | valid BD mobile | Phone number (used as identifier) |\n| `profession` | string \\| int | server-defined values (e.g. `\"1\"`) | User's profession category |\n\n### Response (success)\n```json\n{\n  \"success\": true,\n  \"message\": \"Login successful\",\n  \"data\": {\n    \"userId\": 45012641530,\n    \"otpRequired\": false,\n    \"authToken\": \"<long-hex-token>\",\n    \"displayMessage\": \"Login successful\",\n    \"otpValidity\": 0,\n    \"resendInterval\": 0,\n    \"loginVerified\": false\n  }\n}\n```\n\n**After this call:** The test script auto-captures `auth_token` and `user_id` into collection variables. If `otpRequired = true`, call **Verify OTP** before proceeding.\n\n**Auth:** None (public endpoint)"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('OTP verified successfully', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const res = pm.response.json();",
+                  "    pm.expect(res.success).to.be.true;",
+                  "});",
+                  "",
+                  "// If the server issues a new/refreshed token after OTP verification, capture it",
+                  "if (pm.response.code === 200) {",
+                  "    try {",
+                  "        const res = pm.response.json();",
+                  "        if (res.success && res.data && res.data.authToken) {",
+                  "            pm.collectionVariables.set('auth_token', res.data.authToken);",
+                  "            console.log('✅ auth_token refreshed after OTP verification');",
+                  "        }",
+                  "    } catch (e) {}",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"otp\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/verify-otp",
+              "host": ["{{base_url}}"],
+              "path": ["verify-otp"]
+            },
+            "description": "**Verify the OTP** sent to the user's mobile number after login when `otpRequired = true`.\n\nCall this **only when** the Login response returns `\"otpRequired\": true`.\n\n### Request body fields\n| Field | Type | Description |\n|-------|------|-------------|\n| `user_id` | string \\| int | User ID from Login response (`data.userId`). Collection variable `{{user_id}}` is pre-set. |\n| `otp` | string | 4–6 digit OTP received via SMS |\n\n### Error response (invalid OTP)\n```json\n{ \"success\": false, \"message\": \"Invalid attempt.\", \"data\": [] }\n```\n\n**Prerequisite:** `POST /login` must be called first to obtain `user_id`.\n**Auth:** None (public endpoint)"
+          },
+          "response": []
+        },
+        {
+          "name": "Resend OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Resend OTP response received', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Sample error: {\"success\":false,\"message\":\"Invalid attempt!\",\"data\":[]}",
+                  "if (pm.response.code === 200) {",
+                  "    const res = pm.response.json();",
+                  "    if (!res.success) {",
+                  "        console.warn('⚠️  Resend OTP failed:', res.message);",
+                  "    } else {",
+                  "        console.log('✅ OTP resent successfully');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/resend-otp?user_id={{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["resend-otp"],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "{{user_id}}",
+                  "description": "Numeric user ID from Login response (auto-set in collection variable)"
+                }
+              ]
+            },
+            "description": "**Resend OTP** to the user's registered mobile number.\n\n### Query parameters\n| Param | Type | Required | Description |\n|-------|------|----------|-------------|\n| `user_id` | integer | ✅ Yes | User ID from Login response. Collection variable `{{user_id}}` is pre-filled. |\n\n### Response (invalid session)\n```json\n{ \"success\": false, \"message\": \"Invalid attempt!\", \"data\": [] }\n```\n\n**Prerequisite:** `POST /login` must be called first to obtain `user_id`.\n**Auth:** None (public endpoint — `user_id` is the identifier)"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Clear local auth token on successful logout",
+                  "if (pm.response.code === 200) {",
+                  "    const res = pm.response.json();",
+                  "    if (res.success) {",
+                  "        pm.collectionVariables.set('auth_token', '');",
+                  "        pm.collectionVariables.set('user_id', '');",
+                  "        console.log('✅ Logged out — auth_token and user_id cleared');",
+                  "    }",
+                  "}",
+                  "",
+                  "pm.test('Logout response received', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/logout",
+              "host": ["{{base_url}}"],
+              "path": ["logout"]
+            },
+            "description": "**Invalidate the current session** server-side.\n\n> ⚠️ **Evidence level: INFERRED.** The client symbol `apilogout` exists in `libapp.so` but a naive GET/POST to `/api/beta/logout` returned **404** during live probing. The app may perform **local-only token clearing** without a server call. Try this endpoint and check for 200/404.\n\n### Request body\nEmpty JSON object `{}` or may need `{\"authToken\": \"{{auth_token}}\"}`.\n\n**Auth:** `Authorization: Bearer {{auth_token}}` (inherited from collection)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📄 Static Content",
+      "description": "Public static content endpoints — no authentication required. Returns HTML strings inside the `data` field (rendered in-app via WebView).",
+      "item": [
+        {
+          "name": "Terms & Conditions",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/info/terms",
+              "host": ["{{base_url}}"],
+              "path": ["info", "terms"]
+            },
+            "description": "Retrieve the MedEx **Terms & Conditions** document.\n\n### Response shape\n```json\n{\n  \"success\": true,\n  \"message\": \"...\",\n  \"data\": \"<html>...</html>\"\n}\n```\n`data` is a raw **HTML string** displayed in an in-app WebView — not a JSON object tree.\n\n**Auth:** None (public)"
+          },
+          "response": []
+        },
+        {
+          "name": "Privacy Policy",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/info/privacy-policy",
+              "host": ["{{base_url}}"],
+              "path": ["info", "privacy-policy"]
+            },
+            "description": "Retrieve the MedEx **Privacy Policy** document.\n\n### Response shape\n```json\n{\n  \"success\": true,\n  \"message\": \"...\",\n  \"data\": \"<html>...</html>\"\n}\n```\n`data` is a raw **HTML string** displayed in an in-app WebView.\n\n**Auth:** None (public)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "💊 Brands (Drugs)",
+      "description": "Brand/drug listing and detail endpoints. These map to the `apiDrugsList`, `apiDrugsDetailsList`, and `apiGenericBrandsShortBy` client symbols.\n\nAuthentication is optional — unauthenticated calls may return limited data or a token-missing envelope. Full data requires a valid Bearer token.",
+      "item": [
+        {
+          "name": "List Brands (Paginated)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/brands?page=1",
+              "host": ["{{base_url}}"],
+              "path": ["brands"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Pagination — 1-indexed page number"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "name",
+                  "description": "Sort field (e.g. name, price). Disable to use default ordering.",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Retrieve a **paginated list of all brands (drugs)**.\n\n**Client symbol:** `apiDrugsList`\n\n### Query parameters\n| Param | Type | Required | Description |\n|-------|------|----------|-------------|\n| `page` | integer | Optional | Page number (1-indexed). Omit for first page. |\n| `sortBy` | string | Optional | Sort field — `name`, etc. (from binary string `brands?sortBy=`). |\n\n### Response `data` item fields (example)\n```json\n{\n  \"id\": 12345,\n  \"name\": \"Paracetamol 500mg\",\n  \"strength\": \"500mg\",\n  \"category\": \"Analgesic\",\n  \"dosageForm\": { \"id\": 1, \"name\": \"Tablet\" },\n  \"company\": { \"id\": 86, \"name\": \"Square Pharmaceuticals\" },\n  \"generic\": { \"id\": 10, \"name\": \"Paracetamol\" },\n  \"packages\": [ { \"size\": \"10s\", \"price\": 12.00 } ]\n}\n```\n\n**Auth:** `Authorization: Bearer {{auth_token}}` (optional — but required for full data)"
+          },
+          "response": []
+        },
+        {
+          "name": "List Brands — Generic (OTC/Unbranded) Type",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/brands?type=gen&page=1",
+              "host": ["{{base_url}}"],
+              "path": ["brands"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "gen",
+                  "description": "Filter to generic/unbranded drug entries"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Pagination page number"
+                }
+              ]
+            },
+            "description": "List brands filtered to **generic/unbranded (OTC) type** (`type=gen`).\n\nBinary fragment: `brands?type=gen&page=`\n\n**Client symbol:** `apiDrugsList` (with type filter)\n\n### Query parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `type` | string | `gen` = generic/unbranded |\n| `page` | integer | Page number |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "List Brands — Sorted",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/brands?sortBy=name&page=1",
+              "host": ["{{base_url}}"],
+              "path": ["brands"],
+              "query": [
+                {
+                  "key": "sortBy",
+                  "value": "name",
+                  "description": "Sort field. Known value: name. Other values may include price, company, etc."
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Pagination page number"
+                }
+              ]
+            },
+            "description": "List brands with explicit **sort order**.\n\nBinary fragment: `brands?sortBy=`\n\n**Client symbol:** `apiGenericBrandsShortBy`\n\n### Query parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `sortBy` | string | Sort field (e.g. `name`, `price`) |\n| `page` | integer | Page number |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Brand Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/brands/{{brand_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["brands", "{{brand_id}}"]
+            },
+            "description": "Get **full detail** for a single brand/drug by its ID.\n\n**Client symbol:** `apiDrugsDetailsList`\n\n> ⚠️ Note: `/drugs/{id}` returns **404** — the correct path is `/brands/{id}` (confirmed by live probe).\n\n### Path parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `brand_id` | integer | Brand/drug ID (snowflake-style large integer from list responses). Collection variable: `{{brand_id}}` |\n\n### Response `data` fields (detail — extended vs list)\nIncludes full prescribing info, indication list, side effects, dosage, nested `generic`, `company`, `dosageForm`, and `packages` arrays.\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🏢 Companies",
+      "description": "Pharmaceutical company listing and per-company brand list.\n\n**Client symbols:** `apiCompaniesList`, `apiCompanyBrandsList`",
+      "item": [
+        {
+          "name": "List Companies",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/companies",
+              "host": ["{{base_url}}"],
+              "path": ["companies"],
+              "query": [
+                {
+                  "key": "alpha",
+                  "value": "A",
+                  "description": "Filter companies by starting letter (A–Z). Omit for full list.",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Retrieve the list of all pharmaceutical companies.\n\n**Client symbol:** `apiCompaniesList`\n\n### Query parameters\n| Param | Type | Required | Description |\n|-------|------|----------|-------------|\n| `alpha` | string (single letter) | Optional | Filter by company name initial letter. Binary fragment: `companies?alpha=` |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "List Companies — Alphabetical Filter",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/companies?alpha=S",
+              "host": ["{{base_url}}"],
+              "path": ["companies"],
+              "query": [
+                {
+                  "key": "alpha",
+                  "value": "S",
+                  "description": "Single letter A–Z to filter companies whose name starts with this letter"
+                }
+              ]
+            },
+            "description": "Filter companies whose name **starts with a specific letter**.\n\nBinary fragment: `companies?alpha=`\n\n**Client symbol:** `apiCompaniesList`\n\n### Query parameters\n| Param | Type | Required | Description |\n|-------|------|----------|-------------|\n| `alpha` | string | ✅ Yes | One uppercase letter (A–Z). Change `S` to any letter. |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Company Brands",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/companies/{{company_id}}/brands",
+              "host": ["{{base_url}}"],
+              "path": ["companies", "{{company_id}}", "brands"]
+            },
+            "description": "Get all **brands (drugs) produced by a specific company**.\n\n**Client symbol:** `apiCompanyBrandsList`\n\nLive probe: `/companies/86934930844/brands` → **200 OK**\n\n### Path parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `company_id` | integer | Company ID from the company list. Collection variable: `{{company_id}}` |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🧬 Generics",
+      "description": "Generic drug listing and detail. Herbal and Veterinary are sub-types of the same `/generics` endpoint filtered by `type` query param.\n\n**Client symbols:** `apiGenericsList`, `apiGenericsDetailsList`, `apiGenericBrandsList`",
+      "item": [
+        {
+          "name": "List Generics (Paginated)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generics?page=1",
+              "host": ["{{base_url}}"],
+              "path": ["generics"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (1-indexed)"
+                }
+              ]
+            },
+            "description": "Retrieve a **paginated list of all generic drugs** (allopathic, default category).\n\n**Client symbol:** `apiGenericsList`\n\n### Query parameters\n| Param | Type | Required | Description |\n|-------|------|----------|-------------|\n| `page` | integer | Optional | Page number. Binary fragment: `generics?page=` |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Generic Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generics/{{generic_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["generics", "{{generic_id}}"]
+            },
+            "description": "Get **full detail** for a single generic by ID.\n\n**Client symbol:** `apiGenericsDetailsList`\n\nLive probe: `/generics/1` → **200 OK**\n\n### Path parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `generic_id` | integer | Generic drug ID from list. Collection variable: `{{generic_id}}` |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Generic Brands",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generics/{{generic_id}}/brands",
+              "host": ["{{base_url}}"],
+              "path": ["generics", "{{generic_id}}", "brands"]
+            },
+            "description": "Get all **brands (trade names) available for a specific generic**.\n\n**Client symbol:** `apiGenericBrandsList`\n\nLive probe: `/generics/1/brands` → **200 OK**\n\n### Path parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `generic_id` | integer | Generic drug ID. Collection variable: `{{generic_id}}` |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🌿 Herbal",
+      "description": "Herbal medicine generics — same `/generics` endpoint as allopathic but filtered with `type=herbal`.\n\n**Client symbols:** `apiHerbalList`, `apiHerbalDetailsList`, `apiHerbalBrandsList`",
+      "item": [
+        {
+          "name": "List Herbal Generics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generics?type=herbal&page=1",
+              "host": ["{{base_url}}"],
+              "path": ["generics"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "herbal",
+                  "description": "Filters results to herbal medicine generics"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                }
+              ]
+            },
+            "description": "List **herbal/Ayurvedic generics**.\n\nBinary fragment: `generics?type=herbal&page=`\n\n**Client symbol:** `apiHerbalList`\n\n### Query parameters\n| Param | Type | Required | Description |\n|-------|------|----------|-------------|\n| `type` | string | ✅ Yes | Must be `herbal` |\n| `page` | integer | Optional | Page number |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Herbal Generic Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generics/{{generic_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["generics", "{{generic_id}}"]
+            },
+            "description": "Get detail for a **herbal generic** by ID.\n\nSame route as `GET /generics/{id}` — the herbal context comes from the ID obtained via the herbal list.\n\n**Client symbol:** `apiHerbalDetailsList`\n\n### Path parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `generic_id` | integer | Herbal generic ID from the herbal list |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Herbal Generic Brands",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generics/{{generic_id}}/brands",
+              "host": ["{{base_url}}"],
+              "path": ["generics", "{{generic_id}}", "brands"]
+            },
+            "description": "Get all **brands for a herbal generic**.\n\nSame route as `GET /generics/{id}/brands` — the herbal context comes from the ID.\n\n**Client symbol:** `apiHerbalBrandsList`\n\n### Path parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `generic_id` | integer | Herbal generic ID |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🐾 Veterinary",
+      "description": "Veterinary medicine generics — same `/generics` endpoint filtered with `type=veterinary`.\n\n**Client symbols:** `apiVeterinaryList`, `apiVeterinaryDetailsList`, `apiVeterinaryBrandsList`",
+      "item": [
+        {
+          "name": "List Veterinary Generics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generics?type=veterinary&page=1",
+              "host": ["{{base_url}}"],
+              "path": ["generics"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "veterinary",
+                  "description": "Filters results to veterinary medicine generics"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                }
+              ]
+            },
+            "description": "List **veterinary medicine generics**.\n\nBinary fragment: `generics?type=veterinary&page=`\n\n**Client symbol:** `apiVeterinaryList`\n\n### Query parameters\n| Param | Type | Required | Description |\n|-------|------|----------|-------------|\n| `type` | string | ✅ Yes | Must be `veterinary` |\n| `page` | integer | Optional | Page number |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Veterinary Generic Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generics/{{generic_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["generics", "{{generic_id}}"]
+            },
+            "description": "Get detail for a **veterinary generic** by ID.\n\nSame route as `GET /generics/{id}` — veterinary context from list-provided ID.\n\n**Client symbol:** `apiVeterinaryDetailsList`\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Veterinary Generic Brands",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/generics/{{generic_id}}/brands",
+              "host": ["{{base_url}}"],
+              "path": ["generics", "{{generic_id}}", "brands"]
+            },
+            "description": "Get all **brands for a veterinary generic**.\n\n**Client symbol:** `apiVeterinaryBrandsList`\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔬 Drug Classes",
+      "description": "Drug/pharmacological class listing, detail, and generics under a class.\n\n**Client symbols:** `apiDrugsClassesDetailsList`, `apiDrugsClassesGenericsList`",
+      "item": [
+        {
+          "name": "List Drug Classes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/drug-classes",
+              "host": ["{{base_url}}"],
+              "path": ["drug-classes"]
+            },
+            "description": "Retrieve all **pharmacological drug classes** (e.g. Analgesic, Antibiotic, etc.).\n\nBinary fragment: `drug-classes/`\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Drug Class Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/drug-classes/{{drug_class_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["drug-classes", "{{drug_class_id}}"]
+            },
+            "description": "Get **detail for a single drug class** by ID.\n\n**Client symbol:** `apiDrugsClassesDetailsList`\n\nLive probe: `/drug-classes/1` → **200 OK**\n\n### Path parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `drug_class_id` | integer | Drug class ID. Collection variable: `{{drug_class_id}}` |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Drug Class Generics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/drug-classes/{{drug_class_id}}/generics",
+              "host": ["{{base_url}}"],
+              "path": ["drug-classes", "{{drug_class_id}}", "generics"]
+            },
+            "description": "Get all **generics that belong to a specific drug class**.\n\n**Client symbol:** `apiDrugsClassesGenericsList`\n\nLive probe: `/drug-classes/1/generics` → **200 OK**\n\n### Path parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `drug_class_id` | integer | Drug class ID. Collection variable: `{{drug_class_id}}` |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "💊 Dosage Forms",
+      "description": "Dosage form (tablet, capsule, syrup, etc.) listing and brands under a form.\n\n**Client symbol:** `apiDosageFormsBrandList`",
+      "item": [
+        {
+          "name": "List Dosage Forms",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dosage-forms",
+              "host": ["{{base_url}}"],
+              "path": ["dosage-forms"]
+            },
+            "description": "Retrieve all **dosage forms** (Tablet, Capsule, Syrup, Injection, etc.).\n\nBinary fragment: `dosage-forms/`\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Dosage Form Brands",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dosage-forms/{{dosage_form_id}}/brands",
+              "host": ["{{base_url}}"],
+              "path": ["dosage-forms", "{{dosage_form_id}}", "brands"]
+            },
+            "description": "Get all **brands available in a specific dosage form**.\n\n**Client symbol:** `apiDosageFormsBrandList`\n\nLive probe: `/dosage-forms/80981232451/brands` → **200 OK**\n\n### Path parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `dosage_form_id` | integer | Dosage form ID from the list. Collection variable: `{{dosage_form_id}}` |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📋 Indications",
+      "description": "Disease/indication listing and search.\n\nBinary fragments: `indications/`, `indications?search=`",
+      "item": [
+        {
+          "name": "List Indications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/indications",
+              "host": ["{{base_url}}"],
+              "path": ["indications"]
+            },
+            "description": "Retrieve all **indications (diseases/conditions)**.\n\nBinary fragment: `indications/`\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Search Indications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/indications?search=fever",
+              "host": ["{{base_url}}"],
+              "path": ["indications"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "fever",
+                  "description": "Search term for filtering indications by name/keyword"
+                }
+              ]
+            },
+            "description": "**Search indications** by keyword/disease name.\n\nBinary fragment: `indications?search=`\n\n### Query parameters\n| Param | Type | Required | Description |\n|-------|------|----------|-------------|\n| `search` | string | ✅ Yes | Keyword to match against indication names |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔍 Search",
+      "description": "Cross-entity search across brands, generics, companies, and more.\n\n**Client symbol:** `apiGetSearchList`\n\nBinary fragments: `search?search=`, `search?type=`",
+      "item": [
+        {
+          "name": "Search — General",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/search?search=paracetamol",
+              "host": ["{{base_url}}"],
+              "path": ["search"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "paracetamol",
+                  "description": "Search term — brand name, generic name, company name, etc."
+                },
+                {
+                  "key": "type",
+                  "value": "brand",
+                  "description": "Filter type — e.g. brand, generic, company. Disable to search all types.",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Global search** across the MedEx catalog.\n\n**Client symbol:** `apiGetSearchList`\n\nLive probe: `search?search=test` → **200 OK**\n\n### Query parameters\n| Param | Type | Required | Description |\n|-------|------|----------|-------------|\n| `search` | string | ✅ Yes | Search keyword |\n| `type` | string | Optional | Filter to entity type (e.g. `brand`, `generic`, `company`, `indication`) |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Search — By Type Filter",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/search?search=paracetamol&type=brand",
+              "host": ["{{base_url}}"],
+              "path": ["search"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "paracetamol",
+                  "description": "Search keyword"
+                },
+                {
+                  "key": "type",
+                  "value": "brand",
+                  "description": "Entity type filter: brand | generic | company | indication"
+                }
+              ]
+            },
+            "description": "Search with an explicit **entity type filter**.\n\nBinary fragment: `search?type=`\n\n**Client symbol:** `apiGetSearchList`\n\n### Query parameters\n| Param | Type | Required | Description |\n|-------|------|----------|-------------|\n| `search` | string | ✅ Yes | Search keyword |\n| `type` | string | ✅ Yes | Entity type: `brand`, `generic`, `company`, `indication`, etc. |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "❤️ Favorites",
+      "description": "User's saved/favorited brands. **Authentication required** for all endpoints in this folder.\n\n**Client symbols (binary fragments):** `favorites/add/`, `favorites/remove/`\n\n> ⚠️ **Evidence level:** Path fragments from `libapp.so`. Naive POST to `/favorites/add` returned **404** in live probing — the brand ID is likely in the URL path as `/favorites/add/{brand_id}` or passed as body `{\"brand_id\": N}`. Both patterns documented below.\n\n**Prerequisite:** Must call Login first to get `auth_token`.",
+      "item": [
+        {
+          "name": "List Favorites",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/favorites",
+              "host": ["{{base_url}}"],
+              "path": ["favorites"]
+            },
+            "description": "Retrieve the **current user's favorited brands**.\n\nLive probe: `GET /favorites` → **200** (returns token-missing envelope without auth).\n\n### Response `data`\nArray of brand objects (same shape as brand detail).\n\n**Auth:** `Authorization: Bearer {{auth_token}}` ✅ **Required**"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Favorite (Path-based)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/favorites/add/{{brand_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["favorites", "add", "{{brand_id}}"]
+            },
+            "description": "**Add a brand to the user's favorites** (path-ID pattern).\n\nBinary fragment: `favorites/add/` — trailing slash in binary suggests the brand ID follows in the URL path.\n\n### Path parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `brand_id` | integer | Brand/drug ID to favorite. Collection variable: `{{brand_id}}` |\n\n> ⚠️ If this returns 404, try the **Add Favorite (Body-based)** request below.\n\n**Auth:** `Authorization: Bearer {{auth_token}}` ✅ **Required**"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Favorite (Body-based)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"brand_id\": {{brand_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/favorites/add",
+              "host": ["{{base_url}}"],
+              "path": ["favorites", "add"]
+            },
+            "description": "**Alternative pattern** — Add a brand to favorites using a JSON body instead of path ID.\n\n### Request body\n| Field | Type | Description |\n|-------|------|-------------|\n| `brand_id` | integer | ID of the brand to add |\n\n> Use this if the path-based variant returns 404.\n\n**Auth:** `Authorization: Bearer {{auth_token}}` ✅ **Required**"
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Favorite (Path-based)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/favorites/remove/{{brand_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["favorites", "remove", "{{brand_id}}"]
+            },
+            "description": "**Remove a brand from the user's favorites** (path-ID pattern).\n\nBinary fragment: `favorites/remove/` — same trailing-slash pattern as `add/`.\n\n### Path parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `brand_id` | integer | Brand/drug ID to un-favorite. Collection variable: `{{brand_id}}` |\n\n**Auth:** `Authorization: Bearer {{auth_token}}` ✅ **Required**"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📜 History",
+      "description": "User's search/view history. **Authentication required** for all endpoints in this folder.\n\n**Client symbols (binary fragments):** `histories/remove/`, `histories/remove/all`\n\n**Prerequisite:** Must call Login first to get `auth_token`.",
+      "item": [
+        {
+          "name": "List History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/histories",
+              "host": ["{{base_url}}"],
+              "path": ["histories"]
+            },
+            "description": "Retrieve the **current user's search/view history**.\n\nLive probe: `GET /histories` → **200** (token-missing envelope without auth).\n\n**Auth:** `Authorization: Bearer {{auth_token}}` ✅ **Required**"
+          },
+          "response": []
+        },
+        {
+          "name": "Remove All History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/histories/remove/all",
+              "host": ["{{base_url}}"],
+              "path": ["histories", "remove", "all"]
+            },
+            "description": "**Clear all history entries** for the current user.\n\nLive probe: `GET /histories/remove/all` → returns **JSON envelope** (auth required for success).\n\n> Note: Uses **GET** method — confirmed by binary string and live probe behavior.\n\n**Auth:** `Authorization: Bearer {{auth_token}}` ✅ **Required**"
+          },
+          "response": []
+        },
+        {
+          "name": "Remove History Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/histories/remove/{{history_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["histories", "remove", "{{history_id}}"]
+            },
+            "description": "**Remove a single history entry** by ID.\n\nBinary fragment: `histories/remove/` — same pattern as favorites, ID likely in path.\n\n### Path parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `history_id` | integer | History entry ID to remove. Collection variable: `{{history_id}}` |\n\n> ⚠️ **Evidence level: INFERRED.** HTTP method may be DELETE rather than POST — try both.\n\n**Auth:** `Authorization: Bearer {{auth_token}}` ✅ **Required**"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "💼 Jobs",
+      "description": "Pharmaceutical industry job listings from MedEx.\n\n**Client symbols:** `apiJobsList`, `apiJobsDetailsList`",
+      "item": [
+        {
+          "name": "List Jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/jobs",
+              "host": ["{{base_url}}"],
+              "path": ["jobs"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Pagination page number (if supported)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Retrieve all **pharmaceutical job listings**.\n\n**Client symbol:** `apiJobsList`\n\nLive probe: `GET /jobs` → **200 OK**\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/jobs/{{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["jobs", "{{job_id}}"]
+            },
+            "description": "Get **detail for a specific job listing** by ID.\n\n**Client symbol:** `apiJobsDetailsList`\n\nLive probe: `/jobs/1` → **200 OK**\n\n### Path parameters\n| Param | Type | Description |\n|-------|------|-------------|\n| `job_id` | integer | Job listing ID. Collection variable: `{{job_id}}` |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📞 Contact & Misc",
+      "description": "Contact form and medicine request submission endpoints.",
+      "item": [
+        {
+          "name": "Contact Us",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"subject\": \"Query about medicine\",\n  \"message\": \"I would like to know more about your drug database.\",\n  \"phone\": \"01711943040\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/contact",
+              "host": ["{{base_url}}"],
+              "path": ["contact"]
+            },
+            "description": "**Submit a contact form message** to MedEx support.\n\n**Client symbol:** `apiContactUs`\n\nLive probe: `GET /contact` → **405 Method Not Allowed** (confirms POST required). Empty POST → **500** (schema not fully verified).\n\n### Request body fields (inferred from binary strings: `subject`, `message`, `email`)\n| Field | Type | Required | Description |\n|-------|------|----------|-------------|\n| `name` | string | Likely ✅ | Sender's name |\n| `email` | string | Likely ✅ | Sender's email |\n| `subject` | string | Optional | Message subject |\n| `message` | string | Likely ✅ | Message body |\n| `phone` | string | Optional | Contact phone number |\n\n**Auth:** Bearer token (optional, inherited from collection)"
+          },
+          "response": []
+        },
+        {
+          "name": "Request Add Medicine",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/request/add-medicine",
+              "host": ["{{base_url}}"],
+              "path": ["request", "add-medicine"]
+            },
+            "description": "**Request to add a missing medicine** to the MedEx database.\n\nLive probe: `GET /request/add-medicine` → returns **JSON envelope** (auth may be required for the actual action).\n\n> ⚠️ This endpoint may require a POST body in the actual app flow (e.g. medicine name, generic, company). The exact schema is not confirmed from the binary.\n\n**Auth:** `Authorization: Bearer {{auth_token}}` (recommended — inherited from collection)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🛒 ACIBD Order System",
+      "description": "# ACIBD MyACI Order Backend\n\n**Base URL:** `http://apps.acibd.com/apps/myaci/` (**cleartext HTTP — plain HTTP, not HTTPS**)\n\nThis is a **separate backend** operated by ACI BD for the integrated ordering feature within MedEx.\n\n## ACIBD Auth Flow\n1. **ACIBD Login** → provides `Customer Code` + `Mobile No` → triggers OTP send\n2. **ACIBD Send OTP** → sends OTP to mobile\n3. Use the session token (`order_token`) for subsequent calls\n4. **ACIBD Add Order** — submit an order\n5. **ACIBD Product List** — browse available products\n\n## ACIBD Error envelope\n```json\n{\n  \"error\": [\"The Customer Code field is required.\", \"The OTP field is required.\", \"The Mobile No field is required.\"],\n  \"success\": 0,\n  \"message\": \"Precondition Failed\"\n}\n```",
+      "item": [
+        {
+          "name": "ACIBD Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('ACIBD Login response received', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Capture ACIBD order token if returned",
+                  "if (pm.response.code === 200) {",
+                  "    try {",
+                  "        const res = pm.response.json();",
+                  "        if (res.success && res.data) {",
+                  "            const token = res.data.order_token || res.data.token || res.data.authToken;",
+                  "            if (token) {",
+                  "                pm.collectionVariables.set('acibd_order_token', token);",
+                  "                console.log('✅ acibd_order_token captured');",
+                  "            }",
+                  "        }",
+                  "    } catch (e) {",
+                  "        console.log('ACIBD login response:', pm.response.text());",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Customer Code\": \"CUST001\",\n  \"Mobile No\": \"01711943040\",\n  \"OTP\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{acibd_base_url}}/login",
+              "host": ["{{acibd_base_url}}"],
+              "path": ["login"]
+            },
+            "description": "**Log in to the ACIBD MyACI order system.**\n\n**Source:** `libapp.so` URL string + live POST probe (error envelope confirmed)\n\n> ⚠️ **Plain HTTP** — this URL uses `http://` (cleartext). The app has `android:usesCleartextTraffic=\"true\"` in the manifest.\n\n### Request body fields (confirmed by server validation error messages)\n| Field | Type | Required | Description |\n|-------|------|----------|-------------|\n| `Customer Code` | string | ✅ Yes | ACIBD customer code |\n| `Mobile No` | string | ✅ Yes | Registered mobile number |\n| `OTP` | string | ✅ Yes | OTP (leave empty initially — triggers OTP send) |\n\n### Error response (empty POST)\n```json\n{\n  \"error\": [\n    \"The Customer Code field is required.\",\n    \"The OTP field is required.\",\n    \"The Mobile No field is required.\"\n  ],\n  \"success\": 0,\n  \"message\": \"Precondition Failed\"\n}\n```\n\n**Auth:** None (own login system)"
+          },
+          "response": []
+        },
+        {
+          "name": "ACIBD Send OTP",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Customer Code\": \"CUST001\",\n  \"Mobile No\": \"01711943040\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{acibd_base_url}}/send-otp",
+              "host": ["{{acibd_base_url}}"],
+              "path": ["send-otp"]
+            },
+            "description": "**Send OTP** for ACIBD login verification.\n\n**Source:** `libapp.so` URL string literal `http://apps.acibd.com/apps/myaci/send-otp`\n\n> ⚠️ **Plain HTTP** — cleartext connection.\n\n### Request body (inferred from ACIBD login flow)\n| Field | Type | Description |\n|-------|------|-------------|\n| `Customer Code` | string | ACIBD customer code |\n| `Mobile No` | string | Mobile number to send OTP to |\n\n**Auth:** None — own ACIBD flow"
+          },
+          "response": []
+        },
+        {
+          "name": "ACIBD Add Order",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{acibd_order_token}}",
+                "type": "text",
+                "description": "ACIBD order session token from ACIBD Login"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_token\": \"{{acibd_order_token}}\",\n  \"products\": [\n    {\n      \"product_id\": \"PROD001\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{acibd_base_url}}/add-order",
+              "host": ["{{acibd_base_url}}"],
+              "path": ["add-order"]
+            },
+            "description": "**Place an order** via the ACIBD MyACI system.\n\n**Source:** `libapp.so` URL string literal `http://apps.acibd.com/apps/myaci/add-order`\n\n> ⚠️ **Plain HTTP** — cleartext connection.\n\n### Request body (inferred from order flow — exact schema not confirmed from binary)\n| Field | Type | Description |\n|-------|------|-------------|\n| `order_token` | string | Session token from ACIBD login (`{{acibd_order_token}}`) |\n| `products` | array | Array of product+quantity objects |\n\n**Binary symbols:** `tokenOrderGet`, `tokenOrderPost`, `order_token` all appear in `libapp.so`.\n\n**Auth:** ACIBD session token in body (`order_token`) and/or header"
+          },
+          "response": []
+        },
+        {
+          "name": "ACIBD Product List",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{acibd_order_token}}",
+                "type": "text",
+                "description": "ACIBD order session token"
+              }
+            ],
+            "url": {
+              "raw": "{{acibd_base_url}}/my-customer-product/",
+              "host": ["{{acibd_base_url}}"],
+              "path": ["my-customer-product", ""]
+            },
+            "description": "Retrieve **customer-specific product list** from ACIBD.\n\n**Source:** `libapp.so` URL string literal `http://apps.acibd.com/apps/myaci/my-customer-product/`\n\n> ⚠️ **Plain HTTP** — cleartext. Note the **trailing slash** — it is present in the binary string and should be preserved.\n\n**Client symbol:** `apiProductList` (inferred to target ACIBD)\n\n**Auth:** ACIBD session/order token required (`{{acibd_order_token}}`)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📊 Google Apps Script Webhook",
+      "description": "Internal analytics/logging webhook. Triggered from native `MainActivity.java` via Flutter platform channel `com.medex.bd.medex/sheet` to log user events (e.g., login data) to a Google Sheet.",
+      "item": [
+        {
+          "name": "Apps Script — Log Event to Sheet",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json; utf-8",
+                "type": "text",
+                "description": "Exact Content-Type used in MainActivity.java"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"mobile_number\": \"01711943040\",\n  \"name\": \"John Doe\",\n  \"profession\": \"1\",\n  \"timestamp\": \"2024-01-01T00:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://script.google.com/macros/s/AKfycbxsszVblVlSzb_EVjf5MCem1QGx9VT1Kykkxu5x9LKiw7bHls9HACI8EacA1gRvzyao/exec",
+              "protocol": "https",
+              "host": ["script", "google", "com"],
+              "path": [
+                "macros",
+                "s",
+                "AKfycbxsszVblVlSzb_EVjf5MCem1QGx9VT1Kykkxu5x9LKiw7bHls9HACI8EacA1gRvzyao",
+                "exec"
+              ]
+            },
+            "description": "**POST to Google Apps Script macro** — logs user/event data to a connected Google Sheet.\n\n**Source:** `com/medex/bd/medex/MainActivity.java` — static method `n(Map)`. Called via Flutter platform channel `com.medex.bd.medex/sheet` → `sendLoginUserToSheetIfLoggedIn`.\n\n### Implementation details (from decompiled Java)\n- Builds `JSONObject` from the incoming `Map<String, Object>` — null values are sent as `\"\"`\n- HTTP method: **POST**\n- Headers set in Java: `Content-Type: application/json; utf-8`, `Accept: application/json`\n- App only checks HTTP **200** status; response body is **not parsed**\n\n### Request body\nFlat JSON object with whatever key-value pairs the Dart side passes via the channel. Likely contains login/user analytics fields.\n\n**Auth:** None (Google Apps Script public macro URL acts as the secret)"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "// Collection-level pre-request: no global pre-processing needed.",
+          "// Individual requests override auth where required (noauth for public endpoints)."
+        ],
+        "type": "text/javascript"
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "exec": [
+          "// Collection-level test: log request details for debugging",
+          "console.log('[MedEx] ' + pm.request.method + ' ' + pm.request.url.toString() + ' → ' + pm.response.code);"
+        ],
+        "type": "text/javascript"
+      }
+    }
+  ]
+}
